@@ -432,6 +432,7 @@
     <div class="side"><div id="mStatus"></div><div class="k">Plan</div><div class="plan" id="mPlan"></div><ul id="mNotes"></ul><div id="mVar"></div></div>
 </div></div>
 
+<script>window.SF_LITE_ONLY = true;</script>
 <script id="engine">
 // Space First engine — shared by the UI prototypes (extracted from space-first.html)
     const $ = id => document.getElementById(id);
@@ -4801,11 +4802,15 @@
         S.lite = lite; document.body.classList.toggle('lite', lite);
         document.querySelectorAll('.modesw [data-mode]').forEach(b => b.setAttribute('aria-pressed', String((b.dataset.mode === 'lite') === lite)));
         [...$('metric').options].forEach(o => { o.hidden = lite && FULL_ONLY_METRICS.includes(o.value); });
-        try { localStorage.setItem(MODE_KEY, lite ? 'lite' : 'full'); } catch (_) {}
+        // the class copy shares this site's storage (same domain): it does not overwrite the mode remembered here
+        if (!(typeof window !== 'undefined' && window.SF_LITE_ONLY)) try { localStorage.setItem(MODE_KEY, lite ? 'lite' : 'full'); } catch (_) {}
     }
-    document.querySelector('.modesw').addEventListener('click', e => { const b = e.target.closest('[data-mode]'); if (b && (b.dataset.mode === 'lite') !== S.lite) { track('mode', b.dataset.mode); applyMode(b.dataset.mode === 'lite'); render(); } });
+    // the class copy is Lite only: no switch, and a Full remembered on this device is not used
+    const LITE_ONLY = typeof window !== 'undefined' && !!window.SF_LITE_ONLY;
+    if (LITE_ONLY) document.querySelector('.modesw').style.display = 'none';
+    document.querySelector('.modesw').addEventListener('click', e => { const b = e.target.closest('[data-mode]'); if (LITE_ONLY) return; if (b && (b.dataset.mode === 'lite') !== S.lite) { track('mode', b.dataset.mode); applyMode(b.dataset.mode === 'lite'); render(); } });
     S.mat = 'auto';
-    { let m = 'lite'; try { m = localStorage.getItem(MODE_KEY) || 'lite'; } catch (_) {} applyMode(m !== 'full'); }
+    { let m = 'lite'; try { m = localStorage.getItem(MODE_KEY) || 'lite'; } catch (_) {} applyMode(LITE_ONLY || m !== 'full'); }
 
     let finishNote = '';
     function syncFinish() {

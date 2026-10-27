@@ -1,6 +1,6 @@
 #!/bin/sh
 # Builds the class copy of Space First from the main site's page.
-# The copy has no link back to the rest of the site, its own stylesheet, the notice about anonymous use,
+# The copy has no link back to the rest of the site, is Lite only, has its own stylesheet, the notice about anonymous use,
 # and the address of the Google Apps Script that records it (log-url.txt; empty = records nothing).
 # Usage: ./sync.sh   — then commit and push this folder.
 set -e
@@ -27,8 +27,8 @@ must('            <a href="../index.html">&larr; Index</a>\n', '')
 s = re.sub(r'href="\.\./assets/site-typography\.css[^"]*"', 'href="assets/site-typography.css"', s)
 if '../' in s.split('<script id="engine">')[0]:
     sys.exit('sync: the page still points outside its folder — check the head and the study bar')
-# the recorder's address, before the page's own scripts
-must('<script id="engine">', f'<script>window.SF_LOG_URL = {url!r};</script>\n<script id="engine">' if url else '<script id="engine">')
+# Lite only for students; the recorder's address when there is one
+must('<script id="engine">', '<script>window.SF_LITE_ONLY = true;' + (f' window.SF_LOG_URL = {url!r};' if url else '') + '</script>\n<script id="engine">')
 # the notice, at the end of the page
 must('    <details class="notes" id="sources">',
      '    <p class="scope-note class-note">Class version: this page records anonymous use — which spaces, systems and views are explored, and for how long — to improve the course. No names or other personal details are collected.</p>\n    <details class="notes" id="sources">')
