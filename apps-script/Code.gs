@@ -2,6 +2,8 @@
 // Paste into the Apps Script of a Google Sheet (Extensions → Apps Script), then Deploy → New deployment →
 // Web app, "Execute as: Me", "Who has access: Anyone". Put the web app URL in log-url.txt and run ./sync.sh.
 const SHEET = 'events';
+// The sheet that receives the rows. A web app has no "active" spreadsheet unless the script is bound to it, so open it by id.
+const SHEET_ID = '1R2u7gsIiQsxABfI1zD6W0YN7Pf3tq0RHFAXh9klfJXs';
 
 function doPost(e) {
   const sheet = sheetOf_();
@@ -16,7 +18,7 @@ function doPost(e) {
 function doGet() { return ok_(); }
 
 function sheetOf_() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ss = SpreadsheetApp.openById(SHEET_ID);
   let sh = ss.getSheetByName(SHEET);
   if (!sh) {
     sh = ss.insertSheet(SHEET);
