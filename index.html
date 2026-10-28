@@ -833,10 +833,11 @@
                   notes: ['A thin plate made to act as a deep beam by its folds: ridge in compression, valley in tension (ARCH 445 02b).', 'Needs edge stiffeners or diaphragms, or the folds flatten out.']
               };
           } },
-        { id: 'barrel', fam: 4, code: '4.3.1', name: 'Long barrel shell', mats: ['concrete'],
+        { id: 'barrel', fam: 4, code: '4.3.1', name: 'Barrel shell', mats: ['concrete'],
           spans: { concrete: { lim: [10, 75], typ: [[20, 60]] } },
-          rule: { concrete: 'h = L/12, chord width L/4' },
+          rule: { concrete: 'long: h = L/12, chord width L/4 · short: arch across the span, rise L/6, stiffening arches every 2L/5 (Engel p.237)' },
           build(L, H, W, m, q) {
+              if (modeOf('barrel', 'long') === 'short') return shortBarrel(L, H, W, m, q);
               const h = L / 12, c = colW('concrete', H), b = clamp(r05(L / 4), 6, 15), t = Math.max(0.08, L / 600);
               return {
                   parts: [...columns(L, H, c), rect(-c, H, L + c, H + t * 3), poly([[0, H], [L, H], [L, H + h], [0, H + h]], 'light'), line([[0, H], [0, H + h]], 'member'), line([[L, H], [L, H + h]], 'member')],
@@ -2230,6 +2231,25 @@
         return surfaceHall({ kind: 'none', mods: ys.map(y => ({ rect: [x0, y - b / 2, x1, y + b / 2], z: () => H, ni: 1, nj: 1 })), faces3: faces, lines3, secY: ys[0], sec: top,
             secParts: [line(path, 'member'), line(side, 'thin')] });
     }
+    // short barrel shell (Engel pp.236–237): the cylinder arches across the span L and is carried along the hall on edge beams;
+    // stiffening arches every few metres stand on columns, so it extends by adding length. Rise L/6 and spacing are the author's.
+    function shortBarrel(L, H, W, m, q) {
+        const f = L / 6, R = (L * L / 4 + f * f) / (2 * f), zc = H + f - R, n = 24, c = colW('concrete', H), t = Math.max(0.08, L / 600);
+        const arc = Array.from({ length: n + 1 }, (_, i) => { const x = L * i / n; return [x, zc + Math.sqrt(Math.max(0, R * R - (x - L / 2) ** 2))]; });
+        const nb = Math.max(1, Math.round(W / (0.4 * L))), sp = W / nb, ys = Array.from({ length: nb + 1 }, (_, k) => k * sp);
+        const faces3 = [], lines3 = [];
+        for (let k = 0; k < nb; k++) for (let i = 0; i < n; i++) { const [x0, z0] = arc[i], [x1, z1] = arc[i + 1];
+            faces3.push({ c: 'shellx', pts: [[x0, ys[k], z0], [x1, ys[k], z1], [x1, ys[k + 1], z1], [x0, ys[k + 1], z0]] }); }
+        for (const y of ys) lines3.push({ c: 'member', pts: arc.map(([x, z]) => [x, y, z]) });
+        for (const x of [0, L]) lines3.push({ c: 'member', pts: [[x, 0, H], [x, W, H]] });
+        const posts = ys.flatMap(y => [[0, y, H], [L, y, H]]);
+        const r = surfaceHall({ kind: 'none', mods: [{ rect: [0, 0, L, W], z: () => H, ni: 1, nj: 1 }], faces3, lines3, posts, secY: W / 2, sec: arc,
+            secParts: [band(arc, t), ...columns(L, H, c)] });
+        return Object.assign(withZone(r, H), { cols: posts.length, colNote: `stiffening arches every ${f1(sp)} m on columns along both edge beams`,
+            thrust: q * sp * L * L / (8 * f), thrustNote: 'per stiffening arch at each foot — taken by ties or buttresses', thrustPerArch: true,
+            notes: ['Short barrel shell (Engel p.237, lower drawing): the cylinder arches across the span, so it pushes outward like a vault; stiffening arches carry it to columns, and the hall extends by adding length.',
+                'Rise L/6 and arch spacing 0.4 L are the author\u2019s; Engel gives the form, not the proportions. Arch thrust H = qsL²/8f per stiffening arch (statics, not in Engel).'] });
+    }
     // Folded cylindrical strips (Engel pp.242–244). Each segment has a constant
     // circular section. At a fold, intersect its two offset axis lines in x/z;
     // interpolating section depths at vertices instead makes a warped surface.
@@ -2678,35 +2698,29 @@
           } },
         // --- 4.3.4 linear shells: folded cylindrical strips, Engel pp.242–244 ---
         { id: 'ls_gird', fam: 4, name: 'Shell girders', mats: ['concrete'], spans: SP4.shell5, roofType: 'shell',
-          rule: { concrete: 'cylindrical strips with constant radius · end columns or folded central supports' },
+          rule: { concrete: 'cylindrical strips with constant radius · cantilevered on folded central supports, Engel p.244' },
           own: (m, L) => shellOwn(m, L, 1.3) * 0.85,
           build(L, H, W, m, q) {
               // p.244 lower: units 0.11 of the length wide; tips 0.07 of the length long, rising at 35°
-              const central = modeOf('ls_gird', 'ends') === 'central', B = bays(W, central ? Math.max(2.5, 0.11 * L) : clamp(L / 5, 3, 6) * 1.35, 1), rb = B.b / 2, z = H + rb;
-              const tip = 0.07 * L, path = central ? [[0, z + 0.7 * tip], [tip, z], [L - tip, z], [L, z + 0.7 * tip]] : [[0, z], [L, z]];
+              const B = bays(W, Math.max(2.5, 0.11 * L), 1), rb = B.b / 2, z = H + rb;
+              const tip = 0.07 * L, path = [[0, z + 0.7 * tip], [tip, z], [L - tip, z], [L, z + 0.7 * tip]];
               // p.244: the upturned tips are troughs turned over (∩), so the end view shows a full circle over the ∪ of the beam
-              const r = foldedCylinderHall(L, H, W, { path, ys: B.ys, b: B.b, signs: central ? [1, -1, 1] : undefined });
+              const r = foldedCylinderHall(L, H, W, { path, ys: B.ys, b: B.b, signs: [1, -1, 1] });
               const edges = Array.from({ length: B.n + 1 }, (_, k) => k * B.p);
               FIELDS_HIT = true;
-              if (central) {
-                  const d = L / 12, support = foldedCylinderHall(L, H, W, {
-                      path: [[L / 2 - d, 0], [L / 2 - d * 0.4, z], [L / 2 + d * 0.4, z], [L / 2 + d, 0]],
-                      signs: [1, -1, 1], groundRise: H * 0.35, segments: [0, 2], ys: B.ys, b: B.b });
-                  // The support knees end on the same horizontal roof cylinder.
-                  r.surf.faces3.push(...support.surf.faces3); r.surf.lines3.push(...support.surf.lines3);
-                  r.parts.push(...support.parts);
-                  r.surf.posts = []; r.plan.posts = [];
-                  r.plan.supportPoints = edges.flatMap(y => [[L / 2 - d, y], [L / 2 + d, y]]);
-                  r.supportCylinder = support.cylinder;
-              } else {
-                  for (const R of r.cylinder.rings) for (const ring of [R[0], R[R.length - 1]]) r.surf.faces3.push({ c: 'solid', pts: ring });
-                  r.surf.posts = edges.flatMap(y => [[0, y, z], [L, y, z]]); r.plan.posts = r.surf.posts;
-              }
+              const d = L / 12, support = foldedCylinderHall(L, H, W, {
+                  path: [[L / 2 - d, 0], [L / 2 - d * 0.4, z], [L / 2 + d * 0.4, z], [L / 2 + d, 0]],
+                  signs: [1, -1, 1], groundRise: H * 0.35, segments: [0, 2], ys: B.ys, b: B.b });
+              // The support knees end on the same horizontal roof cylinder.
+              r.surf.faces3.push(...support.surf.faces3); r.surf.lines3.push(...support.surf.lines3);
+              r.parts.push(...support.parts);
+              r.surf.posts = []; r.plan.posts = [];
+              r.plan.supportPoints = edges.flatMap(y => [[L / 2 - d, y], [L / 2 + d, y]]);
+              r.supportCylinder = support.cylinder;
               return Object.assign(withZone(r, H), { cols: 2 * (B.n + 1),
-                  colNote: central ? 'Two central rows of folded shell supports with arched openings; interior supports' : 'Columns under the shared rims at both ends; end diaphragms',
-                  notes: [central ? 'Cantilevered beam on central supports: cylindrical roof strips and folded cylindrical supports, with arched openings (Engel p.244).' : 'Cylindrical shell girders on end columns (Engel p.53); end diaphragms follow the principle on p.236.',
-                      central ? 'The beam is a trough (∪) and its upturned tips are troughs turned over (∩): the end view shows a circle, the plan a fold curve reaching in from each tip. Units 0.11 of the length wide and tips 0.07 long at 35°, measured on p.244; support spacing and opening height are parametric.'
-                          : 'The folds are intersections of constant-radius cylinders, not tapered U-sections. Unit width, rise and opening height are parametric interpretations; Engel’s drawings give no construction dimensions.'] });
+                  colNote: 'Two central rows of folded shell supports with arched openings; interior supports',
+                  notes: ['Cantilevered beam on central supports: cylindrical roof strips and folded cylindrical supports, with arched openings (Engel p.244).',
+                      'The beam is a trough (∪) and its upturned tips are troughs turned over (∩): the end view shows a circle, the plan a fold curve reaching in from each tip. Units 0.11 of the length wide and tips 0.07 long at 35°, measured on p.244; support spacing and opening height are parametric. Barrel shells on end columns are under Barrel shell (pp.236–237).'] });
           } },
         { id: 'ls_frame', fam: 4, name: 'Shell frames', mats: ['concrete'], spans: SP4.shell5, roofType: 'shell',
           rule: { concrete: 'folded cylindrical roof and legs · constant radius · two-hinged frame, Engel p.242' },
@@ -5234,7 +5248,7 @@
     function drawModal() {
         const r = byId(modalId);
         $('mName').textContent = r.sys.name;
-        $('mSub').textContent = r.sys.ref ? `Engel reference: ${codeLabel(r.sys)} · reference only — the author’s drawing of Engel’s spatial form, not fitted to the hall` : `Engel reference: ${codeLabel(r.sys)} · parametric adaptation · ${FAM[r.sys.fam]} · ${materialLabel(r.sys, r.m)}`;
+        $('mSub').textContent = r.sys.ref ? `Engel reference: ${codeLabel(r.sys)}${pageLabel(r.sys)} · reference only — the author’s drawing of Engel’s spatial form, not fitted to the hall` : `Engel reference: ${codeLabel(r.sys)}${pageLabel(r.sys)} · parametric adaptation · ${FAM[r.sys.fam]} · ${materialLabel(r.sys, r.m)}`;
         drawBig(); drawEye();
         $('mSec').innerHTML = cutSVG(r, 'A');
         $('mSecB').innerHTML = cutSVG(r, 'B');
@@ -5266,6 +5280,29 @@
             + r.notes.filter(n => !stat.test(n)).map(n => `<li>${esc(n)}</li>`).join('')
             + `<li><b>Span basis:</b> ${esc(spanSource(r.sys))}</li><li><b>Reading:</b> Lite — Engel’s mechanism, form and space; estimated loads, forces and sizes are in Full.</li>`;
     }
+    // Engel page of each system's full drawing in its chapter (by mode where the modes are different drawings);
+    // null: Engel draws it only in the genealogy (pp.44–55) or in principle, not as a full drawing
+    const PAGE = {
+        cable: 'p.67', c_iso: 'p.69', c_stag: 'pp.70–71', r_wt: 'p.72', r_iso: 'p.72', r_stag: 'p.73', n_arch: 'pp.82–83', n_beam: 'p.84', n_cable: 'p.80', ctruss: 'p.77', ct_rad: 'p.78',
+        t_bound: 'p.86', t_int: 'p.88', tent: 'pp.90–91', u_bound: 'p.87', u_int: 'p.89', i_ext: 'pp.92–93', i_int: 'p.95',
+        pneu: 'p.106', p_neg: 'p.102', p_posneg: 'p.102', cu_pos: 'p.111', cu_neg: 'p.102', cu_pn: 'p.110', at_env: 'p.107', at_skel: 'p.107',
+        tarch: 'p.115', garch: 'p.118', arch3: 'p.119', vault: 'p.113', v_cross: null, v_cloister: null, v_arch: null, v_pend: null, v_squinch: null, gshell: 'pp.120–125', g_arch: 'pp.126–131',
+        ptruss: 'p.142', tt_bow: null, tt_trap: 'p.142', tb_v: null, tb_cat: null, tb_trap: null, tc_rhomb: null, tc_lens: null, truss: 'p.142', tk_sciss: null, tk_cresc: null, tk_mans: null,
+        tl_beam: 'p.146', tl_frame: 'p.147', tl_arch: 'p.147', tl_irreg: 'p.147', tf_par: 'p.148', tf_poly: null, tf_taper: null, ti_2: null, ti_3: null,
+        lamella: 'p.149', cy_int: 'p.150', sa_arch: null, sa_beam: 'p.151', dm_long: null, sd_schw: 'p.152', sd_lat: 'p.152', sd_par: 'p.153', sd_lam: 'p.153', geodesic: 'p.155',
+        space: 'p.163', st_tetra: 'p.163', st_prism: 'p.157', sf_fold: null, sv_barrel: 'p.167', sv_double: 'p.167', sv_sphere: 'p.167', sl_beam: 'p.168', sl_frame: 'p.168', sl_arch: 'p.168',
+        beam: 'pp.178–179', b_pitch: null, b_angle: null, b_curve: null, cb_h: 'pp.181–182', cb_p: null, cb_a: null, gb_h: null, gb_c: null, k_uni: null, k_bi: null,
+        portal: 'pp.186–187', f_3h: 'pp.189–192', f_fix: null, sf_one: null, vier: 'pp.194–199', sf_multi: null, mf_cont: null, mf_pin: null, mf_fix: null,
+        grid: 'pp.200–201', g_diag: 'p.202', g_tri: 'p.203', gg_orth: 'p.203', gg_skew: 'p.202', gg_tri: null, gc_ring: null, gc_pin: null,
+        p_rect: 'pp.217–218', p_pitch: null, p_step: null, p_cont: null, p_cstep: null, p_can1: null, p_can2: null, p_x2: null, p_x3: null,
+        folded: 'pp.219–221', fb_box: null, fb_barrel: null, fp_pyr: 'p.231', fp_tri: 'p.232', fi_2: 'p.229', fi_3: 'p.228', fl_beam: 'p.221', fl_frame: 'pp.225–226', fl_arch: 'p.227',
+        barrel: { long: 'pp.236–237', short: 'p.237' }, sc_cone: null, sc_int: 'pp.238–239', dome: 'pp.245–249', sd_trans: 'p.256', ss_rot: null, ss_trans: 'p.256', hyparT: 'p.257',
+        ls_gird: 'p.244', ls_frame: { two: 'p.242', a: 'p.244' }, ls_arch: { top: 'p.243', two: 'p.243' },
+        hp_umb: 'p.264', hp_butt: 'p.264', hp_conoid: 'p.265', hp_sq4: 'p.261', hpr_2: 'p.260', hpr_3: 'p.260', hpr_tri: 'p.261', hpr_hex: 'p.261', hpr_5a: 'p.262', hpr_5b: 'p.262', hpr_8: 'p.262', hpr_16: 'p.263', hpr_12: 'p.263',
+        cbeam: 'p.323', hy_3h: 'p.324', hy_arch2: 'p.324', hy_poly: 'p.324', hy_bil2: 'p.325', hy_3hr: 'p.325', hy_portb: 'p.325', hy_ctr: 'p.326', hy_carch: 'p.326', hy_trf: 'p.327', hy_ctg: 'p.327', hy_cfp: 'p.327', hy_par: 'p.323', hy_conc: 'p.323', hy_grid: 'p.323'
+    };
+    const pageOf = sys => { const v = PAGE[sys.id]; if (v && typeof v === 'object') return v[modeOf(sys.id, MODES[sys.id][0][0])]; return v; };
+    const pageLabel = sys => pageOf(sys) ? ` · ${pageOf(sys)}` : ' · no full drawing';
     // the same vault with its thrust taken three ways (Engel p.113); the first is the default
     const MODES = {
         vault: [['buttress', 'Buttresses'], ['tie', 'Ties'], ['adjacent', 'Neighbouring vaults']],
@@ -5275,11 +5312,11 @@
         ss_rot: [['columns', 'On columns'], ['ground', 'From the ground']],
         hyparT: [['columns', 'On side columns + tie'], ['ground', 'On two points on the ground']],
         fl_arch: [['top', 'Arch with a top hinge'], ['three', 'Three-hinged arch']],
-        ls_gird: [['ends', 'On end columns'], ['central', 'Cantilevered on central supports']],
-        ls_frame: [['two', 'Two-hinged frame · p.242'], ['a', 'Two-hinged A-frame · p.244']],
-        ls_arch: [['top', 'Arch with top hinge · p.243'], ['two', 'Two-hinged arch · p.243']]
+        barrel: [['long', 'Long barrel shell'], ['short', 'Short barrel shell']],
+        ls_frame: [['two', 'Two-hinged frame'], ['a', 'Two-hinged A-frame']],
+        ls_arch: [['top', 'Arch with top hinge'], ['two', 'Two-hinged arch']]
     };
-    const MODE_T = { dome: 'Supports · Engel p.53', ss_rot: 'Supports · Engel p.53', hyparT: 'Supports · Engel pp.53, 264', fl_arch: 'Form · Engel p.227', ls_gird: 'Supports · Engel pp.53, 244', ls_frame: 'Form · Engel pp.242, 244', ls_arch: 'Form · Engel p.243' };
+    const MODE_T = { dome: 'Supports · Engel p.53', ss_rot: 'Supports · Engel p.53', hyparT: 'Supports · Engel pp.53, 264', fl_arch: 'Form · Engel p.227', barrel: 'Form · Engel pp.236–237', ls_frame: 'Form · Engel pp.242, 244', ls_arch: 'Form · Engel p.243' };
     function modeVariants(id) {
         const keep = S.tm, sys = SYS.find(x => x.id === id), pr = projector(), cur = (keep && keep[id]) || MODES[id][0][0];
         const V = MODES[id].map(([mode, name]) => { S.tm = Object.assign({}, keep, { [id]: mode }); const r = evaluate(sys); r.P3 = projectScene(scene3D(r), pr); return { r, mode, name }; });
