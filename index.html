@@ -190,7 +190,7 @@
 
     /* Your project: building types, requirements, the systems that fit */
     .ptypes { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:8px; margin:0 0 18px; }
-    .ptype { text-align:left; background:transparent; border:1px solid var(--line); padding:8px 10px; cursor:pointer; font:inherit; color:var(--ink); }
+    .ptype { text-align:left; background:transparent; border:1px solid var(--line); padding:8px 10px; cursor:pointer; font:inherit; color:var(--ink); display:flex; flex-direction:column; justify-content:flex-start; align-items:stretch; }
     .ptype b { display:block; font-size:12px; font-weight:600; }
     .ptype small { display:block; color:#777; font-size:10.5px; margin-top:3px; line-height:1.4; }
     .ptype[aria-pressed="true"] { background:var(--ink); color:#fff; }
@@ -271,6 +271,7 @@
     .vt figcaption small { display:block; color:#888; }
     .vt.off { opacity:.3; }
     .vt.nomod { opacity:.45; } .vt.nomod .vd { border:1px dashed #bbb; margin-bottom:3px; }
+    .vsub { font-size:10px; letter-spacing:.3px; text-transform:uppercase; color:#777; border-top:1px solid var(--line); padding-top:5px; margin:4px 0 0; }
     .vt.in { background:#111; color:#fff; border-color:#111; } .vt.in .vd svg { filter:invert(1); }
     .vt .vadd { position:absolute; right:3px; bottom:3px; width:18px; height:18px; padding:0; border:1px solid var(--line); background:#fff; color:var(--ink); font:inherit; font-size:11px; line-height:16px; cursor:pointer; }
     .vt.in .vadd { background:#111; color:#fff; border-color:#666; }
@@ -478,6 +479,8 @@
     const colW = (m, H) => m === 'concrete' ? Math.max(0.3, H / 15) : m === 'timber' ? Math.max(0.2, H / 18) : Math.max(0.2, H / 25);
     const alongSides = (W, s) => 2 * (Math.ceil(W / s - 1e-9) + 1);
     const perimeter = (L, W, s) => Math.ceil(2 * (L + W) / s);
+    // a post under a surface system: square, 1/20 of its height and at least 0.25 m (the author's, between colW's steel and concrete)
+    const postW = z => Math.max(0.25, z / 20);
     function columns(L, H, c) { return [rect(-c, 0, 0, H), rect(L, 0, L + c, H)]; }
     // hybrids: a member of depth d along a → b, the spans the author assumes (no Engel chart), the frame spacing
     const hbar = (a, b, d, c = 'solid') => { const dx = b[0] - a[0], dz = b[1] - a[1], l = Math.hypot(dx, dz) || 1, nx = -dz / l * d, nz = dx / l * d; return poly([a, b, [b[0] + nx, b[1] + nz], [a[0] + nx, a[1] + nz]], c); };
@@ -1208,7 +1211,7 @@
         for (const l of [...(o.lines3 || []), ...(o.faces3 || [])]) for (const p of l.pts) zmax = Math.max(zmax, p[2]);
         const inM0 = y => m0.disk && !m0.rect ? Math.abs(y - m0.disk[1]) <= m0.disk[2] + 0.01 : (y >= m0.rect[1] - 0.01 && y <= m0.rect[3] + 0.01);
         const parts = o.secParts ? [line(sec, 'member'), ...o.secParts] : [line(sec, o.kind === 'shellx' ? 'member' : 'cable'), ...(o.extra2d || [])];
-        if (!o.secParts) for (const [x, y, z] of o.posts || []) if (m0.disk ? Math.abs(y - m0.disk[1]) < 0.3 : inM0(y)) parts.push(rect(x - 0.12, 0, x + 0.12, z));
+        if (!o.secParts) for (const [x, y, z] of o.posts || []) if (m0.disk ? Math.abs(y - m0.disk[1]) < 0.3 : inM0(y)) parts.push(rect(x - postW(z) / 2, 0, x + postW(z) / 2, z));
         // boxes cut by the section plane, plus piers standing behind it in the first bay (not walls running across)
         const ysec = o.secY != null ? o.secY : m0.disk ? m0.disk[1] : (o.secY != null ? o.secY : modPt(m0, 0.5, o.secT != null ? o.secT : 0.5)[1]);
         if (!o.secParts) for (const b of o.boxes || []) if ((b[2] - 0.01 <= ysec && ysec <= b[3] + 0.01) || ((inM0(b[2]) || inM0(b[3])) && b[1] - b[0] < S.L / 2)) parts.push(rect(b[0], b[4], b[1], b[5], 'light'));
@@ -1239,7 +1242,7 @@
                 if (dir !== 'y') for (let j = 0; j <= kj; j++) { const pts = []; for (let t = 0; t <= si; t++) pts.push(P(t * ni / si, j * nj / kj, ni, nj)); add('line', pts, cs); }
             }
         }
-        for (const [x, y, z] of o.posts || []) add('line', [[x, y, 0], [x, y, z]], 'post');
+        for (const [x, y, z] of o.posts || []) { const c = postW(z) / 2; box3(add, x - c, x + c, y - c, y + c, 0, z, 'solid'); }
         for (const b of o.boxes || []) box3(add, b[0], b[1], b[2], b[3], b[4], b[5], 'solid', b[6] || {});
         for (const f of o.faces3 || []) add('face', f.pts, f.c || 'solid', f.e);
         for (const l of o.lines3 || []) add('line', l.pts, l.c || 'cable');
@@ -1545,7 +1548,7 @@
                   notes: ['Inflated tubes form a skeleton of arches; a separate skin is hung between them (Engel 1.3.3.2).'] });
           } },
         // --- 1.4 vaults and lattices ---
-        { id: 'v_cross', fam: 1, name: 'Cross (groin) vault', ...M(SP.vault, ['masonry']), rule: { masonry: 'bays L × ~L, semicircular webs rising L/2 (Engel p.47), piers at the corners · thrust taken by side rooms, ties or buttresses' }, roofType: 'shell', own: (m, L) => 20 * Math.max(0.2, L / 50) * (Math.PI - 2),   // two semicircular barrels crossing: surface (π − 2) × plan
+        { id: 'v_cross', fam: 1, name: 'Cross (groin) vault', ref: true, ...M(SP.vault, ['masonry']), rule: { masonry: 'bays L × ~L, semicircular webs rising L/2 (Engel p.47), piers at the corners · thrust taken by side rooms, ties or buttresses' }, roofType: 'shell', own: (m, L) => 20 * Math.max(0.2, L / 50) * (Math.PI - 2),   // two semicircular barrels crossing: surface (π − 2) × plan
           build(L, H, W, m, q) {
               const mode = modeOf('v_cross', 'aisles'), f = L / 2, rs = rowRects(L, W), b = rs[0][3] - rs[0][1], tp = Math.max(0.8, L / 12);
               const Hx1 = q * L * L * b / (16 * f), Hy1 = q * L * b * b / (16 * f), V1 = q * L * b / 4, ys = [...new Set(rs.flatMap(([, y0, , y1]) => [y0, y1]))];
@@ -1592,7 +1595,7 @@
               const r = surfaceHall(vault);
               return Object.assign(r, { zone: f, cols, colNote, thrust, thrustNote, thrustPerArch: true, forces, notes: [...notes, 'Click the drawing to compare side vaults, ties and buttresses.'] });
           } },
-        { id: 'v_cloister', fam: 1, name: 'Cloister vault', ...M(SP.vault, ['masonry']), rule: { masonry: 'semicircular webs rising L/2 from all four walls (Engel p.47) · thrust taken by buttressed walls, ties or wall mass' }, roofType: 'shell',
+        { id: 'v_cloister', fam: 1, name: 'Cloister vault', ref: true, ...M(SP.vault, ['masonry']), rule: { masonry: 'semicircular webs rising L/2 from all four walls (Engel p.47) · thrust taken by buttressed walls, ties or wall mass' }, roofType: 'shell',
           // surface per plan: the two hip ends make one cloister vault over L × L (2L²), the middle is a barrel (π/2 per plan)
           own: (m, L) => { const W = Math.max(S.W, L); return 20 * Math.max(0.2, L / 50) * (2 * L * L + (W - L) * L * Math.PI / 2) / (L * W); },
           build(L, H, W, m, q) {
@@ -1648,7 +1651,7 @@
               const r = surfaceHall(o);
               return Object.assign(r, { zone: f, cols: 0, colNote, thrust, thrustNote, thrustPerArch: perArch, forces, notes: [...notes, 'Click the drawing to compare buttressed walls, ties and walls by mass.'] });
           } },
-        { id: 'v_arch', fam: 1, name: 'Sail vault on four arches', ...M(SP.vault, ['masonry']), rule: { masonry: 'one sphere through the four corners, cut by the four sides' }, roofType: 'shell', own: (m, L) => 20 * Math.max(0.2, L / 50) * 1.3,
+        { id: 'v_arch', fam: 1, name: 'Sail vault on four arches', ref: true, ...M(SP.vault, ['masonry']), rule: { masonry: 'one sphere through the four corners, cut by the four sides' }, roofType: 'shell', own: (m, L) => 20 * Math.max(0.2, L / 50) * 1.3,
           build(L, H, W, m, q) {
               const rs = rowRects(L, W), b = rs[0][3] - rs[0][1], R1 = Math.hypot(L / 2, b / 2), tp = Math.max(0.8, L / 12); let VP;
               const redge = t => { const th = angT(t, L, b); return Math.min(L / 2 / Math.max(1e-6, Math.abs(Math.cos(th))), b / 2 / Math.max(1e-6, Math.abs(Math.sin(th)))); };
@@ -1667,7 +1670,7 @@
                   thrust: q * L * L * b / (8 * R1), thrustNote: `interior pier, across the hall — minimum thrust with the line of thrust through the crown ${f2(R1)} m up: Hx = qL²b/8c; end piers ${Math.round(q * L * b * Math.hypot(L, b) / (16 * R1))} kN diagonal`, thrustPerArch: true,
                   notes: ['One spherical cap through the four corners, cut by the four side planes: the cuts are the arches, the bay stands on four piers (Engel 1.4.2.4, p.47).', `The crown stands ${f1_(R1)} m above the springing — half the diagonal of the bay.`, VP.note] });
           } },
-        { id: 'v_pend', fam: 1, name: 'Dome on pendentives', ...M(SP.vault, ['masonry']), rule: { masonry: 'pendentives up to the inscribed circle, hemispherical dome above' }, roofType: 'shell', own: (m, L) => 20 * Math.max(0.2, L / 50) * 1.3,
+        { id: 'v_pend', fam: 1, name: 'Dome on pendentives', ref: true, ...M(SP.vault, ['masonry']), rule: { masonry: 'pendentives up to the inscribed circle, hemispherical dome above' }, roofType: 'shell', own: (m, L) => 20 * Math.max(0.2, L / 50) * 1.3,
           build(L, H, W, m, q) {
               const rs = rowRects(L, W), b = rs[0][3] - rs[0][1], a = Math.min(L, b), R1 = Math.hypot(L / 2, b / 2), z1 = Math.sqrt(Math.max(0, R1 * R1 - (a / 2) ** 2)), tp = Math.max(0.8, L / 12), c = z1 + a / 2; let VP;
               const mods = [], lines3 = [];
@@ -1687,7 +1690,7 @@
                   thrust: q * L * L * b / (8 * c), thrustNote: `interior pier, across the hall — minimum thrust (Heyman), line of thrust through the crown ${f2(c)} m up: Hx = qL²b/8c; end piers ${Math.round(q * L * b * Math.hypot(L, b) / (16 * c))} kN diagonal`, thrustPerArch: true,
                   notes: ['Pendentives — spherical triangles cut from one sphere through the four corners — carry the round dome down to four piers; the cut edges are the arches between piers (Engel 1.4.2.5).', `A hemispherical dome over a ${f1_(a)} m square stands ${f1_(c)} m above the springing — that height is the geometry of the system (Hagia Sophia proportions).`, VP.note] });
           } },
-        { id: 'v_squinch', fam: 1, name: 'Dome on squinches', ...M(SP.vault, ['masonry']), rule: { masonry: 'arches on four piers, squinches turn the square into an octagon, dome above' }, roofType: 'shell', own: (m, L) => 20 * Math.max(0.2, L / 50) * 1.3,
+        { id: 'v_squinch', fam: 1, name: 'Dome on squinches', ref: true, ...M(SP.vault, ['masonry']), rule: { masonry: 'arches on four piers, squinches turn the square into an octagon, dome above' }, roofType: 'shell', own: (m, L) => 20 * Math.max(0.2, L / 50) * 1.3,
           build(L, H, W, m, q) {
               const rs = rowRects(L, W), b = rs[0][3] - rs[0][1], a = Math.min(L, b), Hs = H + Math.max(L, b) / 2, s8 = a * Math.tan(Math.PI / 8), hq = s8 / 2, Hq = Hs + hq, c = Hq + a / 2 - H;
               const tp = Math.max(0.8, L / 12), tw = Math.max(0.4, a / 30), dC = (a - s8) / 2; let VP;
@@ -4232,8 +4235,9 @@
                 }
             }
             const zc = sys === 'space' ? zt : H;
-            for (const x of ysOf(L, pl.s)) { add('line', [[x, 0, 0], [x, 0, zc]], 'post'); add('line', [[x, W, 0], [x, W, zc]], 'post'); }
-            for (const y of ysOf(W, pl.s)) { add('line', [[0, y, 0], [0, y, zc]], 'post'); add('line', [[L, y, 0], [L, y, zc]], 'post'); }
+            const pc = postW(zc) / 2, post = (x, y) => box3(add, x - pc, x + pc, y - pc, y + pc, 0, zc, 'solid');
+            for (const x of ysOf(L, pl.s)) { post(x, 0); post(x, W); }
+            for (const y of ysOf(W, pl.s)) { post(0, y); post(L, y); }
         } else if (sys === 'dome') {
             const f = r.zone, a = L / 2, R = (a * a + f * f) / (2 * f), zc = H + f - R;
             const n = Math.max(1, Math.round(W / L)), nm = 16, nr = 6;
@@ -4242,7 +4246,7 @@
                 const pt = (ri, mi) => { const rho = a * ri / nr, th = 2 * Math.PI * mi / nm; return [cx + rho * Math.cos(th), cy + rho * Math.sin(th), zc + Math.sqrt(R * R - rho * rho)]; };
                 for (let ri = 0; ri < nr; ri++) for (let mi = 0; mi < nm; mi++) add('face', [pt(ri, mi), pt(ri + 1, mi), pt(ri + 1, mi + 1), pt(ri, mi + 1)], 'shell');
                 const nc = Math.max(8, Math.round(Math.PI * L / 6));
-                for (let i = 0; i < nc; i++) { const th = 2 * Math.PI * i / nc, x = cx + a * Math.cos(th), y = cy + a * Math.sin(th); add('line', [[x, y, 0], [x, y, H]], 'post'); }
+                for (let i = 0; i < nc; i++) { const th = 2 * Math.PI * i / nc, x = cx + a * Math.cos(th), y = cy + a * Math.sin(th), pc = postW(H) / 2; box3(add, x - pc, x + pc, y - pc, y + pc, 0, H, 'solid'); }
             }
         } else if (sys === 'barrel') {
             const h = r.zone, b = pl.b, ysb = ysOf(W, b), nx = 6, na = 10;
@@ -4830,9 +4834,25 @@
         for (const id of typeVariants(t)) if (!seen.has(id)) out.push([sysName(id), id]);
         return out;
     }
+    // straight-edged hypars (Engel pp.257–265) as a group of their own in the shell type: fitted to the hall first, then the
+    // reference compositions, each in page order
+    const HYPAR_FIT = ['hyparT', 'hp_sq4', 'hp_umb', 'hp_butt', 'hp_conoid'];
+    const isHyparRef = id => /^hpr_/.test(id);
+    const pageNum = id => { const v = PAGE[id], p = v && typeof v === 'object' ? Object.values(v)[0] : v; return p ? +p.match(/\d+/)[0] : 999; };
     function typeDrawings(t) {
         if (TREE[t] && TREE[t][2]) return '';
-        const figs = typeList(t).map(([name, id]) => {
+        let list = typeList(t);
+        if (S.lite) list = list.filter(([, id]) => id);
+        if (t === '4.3') {
+            const hyp = list.filter(([, id]) => id && (HYPAR_FIT.includes(id) || isHyparRef(id))), rest = list.filter(x => !hyp.includes(x)), byPage = (a, b) => pageNum(a[1]) - pageNum(b[1]);
+            const fit = hyp.filter(([, id]) => !isHyparRef(id)).sort(byPage), ref = hyp.filter(([, id]) => isHyparRef(id)).sort(byPage);
+            return figsOf(rest) + `<div class="vsub">Straight-edged hypars · Engel pp.257–265</div>` + figsOf(fit)
+                + (ref.length ? `<div class="vsub">Hypar compositions · reference only, pp.260–263</div>` + figsOf(ref) : '');
+        }
+        return figsOf(list);
+    }
+    function figsOf(list) {
+        const figs = list.map(([name, id]) => {
             if (!id) return `<figure class="vt nomod"><div class="vd"></div><figcaption>${esc(name)}<small>no model yet</small></figcaption></figure>`;
             const ok = fitsHall(id), on = slots.includes(id), zoom = ok || byId(id).sys.ref;   // a reference form can be enlarged, not compared
             return `<figure class="vt ${ok ? '' : 'off'} ${on ? 'in' : ''}"><div class="vd" data-lazy="${id}" ${zoom ? `data-zoom="${id}" role="button" tabindex="0" aria-label="Enlarge ${esc(name)}"` : ''}></div>`
@@ -4845,7 +4865,7 @@
         resAll();
         const dw = treeView === 'drawings', block = t => typeButton(t) + (dw ? typeDrawings(t) : '');
         document.querySelectorAll('#treeView button').forEach(b => b.classList.toggle('on', b.dataset.tv === treeView));
-        let h = `${dw ? '<p class="tvnote">Every variant Engel lists, in his order; each drawing at its own scale. Click a drawing to enlarge it, + to put that variant in Compare.</p>' : ''}<div class="gtree ${dw ? 'drawings' : ''}">`;
+        let h = `${dw ? '<p class="tvnote">Every variant Engel lists, in his order; each drawing at its own scale. Click a drawing to enlarge it, + to add that variant as a Compare column (several of one type can stand side by side).</p>' : ''}<div class="gtree ${dw ? 'drawings' : ''}">`;
         for (const f of [1, 2, 3, 4]) h += `<div class="gcol"><div class="gfam"><span class="code">${f}</span>${FAMILY[f]}<small>${esc(FAMSUB[f] || '')}</small></div>${Object.keys(TREE).filter(t => t[0] === String(f)).map(block).join('')}</div>`;
         h += '</div>';
         const list = Object.keys(HYB).map(k => `<li><b>${HYB[k][0]}</b> — ${esc(HYB[k][1])}: ${HYB[k][2].map(([v, id]) => id ? `<u>${esc(v)}</u>` : esc(v)).join(' · ')}</li>`).join('');
@@ -4855,11 +4875,10 @@
         $('types').innerHTML = h;
         if (dw) document.querySelectorAll('#types [data-lazy]').forEach(el => thumbIO.observe(el));
     }
-    // a drawn variant into Compare: it takes its type's column if the type is there, else a new one (or the replace prompt)
+    // a drawn variant into Compare as a column of its own, so variants of one type can stand side by side (or the replace prompt)
     function pickVariant(id) {
-        const r = byId(id); if (!r) return; const here = inType(typeOf(r.sys)); cmpPick = null;
+        const r = byId(id); if (!r) return; cmpPick = null;
         if (slots.includes(id)) { cmpNote = `${sysName(id)} is in Compare.`; return; }
-        if (here.length) { slots[slots.indexOf(here[0])] = id; cmpNote = `${sysName(here[0])} → ${sysName(id)} in Compare.`; return; }
         if (slots.length >= 5) { cmpPick = id; cmpNote = ''; return; }
         slots.push(id); cmpNote = `Added ${sysName(id)}.`;
     }
@@ -5267,18 +5286,61 @@
     function hallRead(r) {
         const fits = resAll().filter(x => !projFails(x).length), d = projRead(r, fits), f = projFails(r);
         return `<div class="hallread"><div class="k">For your hall</div>${f.length ? `<p class="eligibility fail">Does not fit: ${esc(f.map(k => FAILTXT[k]).join(' · '))}</p>` : ''}`
-            + `<div class="h">Gets</div><ul>${li(d.gets)}</ul><div class="h">Gives up</div><ul>${li(d.gives)}</ul><div class="h">Needs in addition</div><ul>${li(d.needs)}</ul></div>`;
+            + (S.lite ? `<div class="h">What it gives your hall</div><ul>${li(d.gets.map(t => sayLite(t, 'gets')))}</ul><div class="h">What it costs your hall</div><ul>${li(d.gives.map(t => sayLite(t, 'gives')))}</ul><div class="h">What else it needs</div><ul>${li(d.needs.map(t => sayLite(t, 'needs')))}</ul></div>`
+                : `<div class="h">Gets</div><ul>${li(d.gets)}</ul><div class="h">Gives up</div><ul>${li(d.gives)}</ul><div class="h">Needs in addition</div><ul>${li(d.needs)}</ul></div>`);
+    }
+    // the Lite reading of "For your hall": each short phrase as a sentence that says why it matters, compared with the
+    // other systems that fit this hall (the author's wording of the same readings)
+    const SAY = [
+        [/^a shallow structure zone \(≈ (.+) m\)/, m => `A shallow structure: the roof needs only about ${m[1]} m of depth, less than most systems that fit, so the building can stay lower.`],
+        [/^a deep structure zone \(≈ (.+) m\)/, m => `A deep structure: about ${m[1]} m of depth above the clear height, more than most systems that fit — the building grows taller for the same space.`],
+        [/^a low overall height \(≈ (.+) m\)/, m => `A low building: about ${m[1]} m in all, among the lowest that fit.`],
+        [/^a tall overall height \(≈ (.+) m\)/, m => `A tall building: about ${m[1]} m in all, among the tallest that fit — more wall, more volume to heat or cool.`],
+        [/^stays within the walls/, () => 'It stays inside the footprint: nothing stands or anchors outside the walls.'],
+        [/^≈ (.+) m of ground outside the walls/, m => `It needs about ${m[1]} m of ground outside the walls, for inclined legs, stays or anchors.`],
+        [/^little unused volume above the space \((.+)\)/, m => `Little wasted volume: the space you asked for fills ${m[1]} of what the structure encloses.`],
+        [/^much volume above the space \((.+)\)/, m => `Much volume above the space: what you asked for fills only ${m[1]} of what it encloses.`],
+        [/^no horizontal push on its supports/, () => 'No sideways push on its supports: its columns or walls only carry weight straight down.'],
+        [/^its thrust stays inside the structure \((.+)\)/, m => `It pushes outward, but ${m[1]} holds that push inside the structure, so the ground takes only weight.`],
+        [/^a large thrust onto (.+)/, m => `A large sideways push onto ${m[1]}: the arching or hanging form that spans so well also pushes hard where it lands.`],
+        [/^its roof follows the rake/, () => 'Its roof can slope with the seating, so it rises only where the space rises.'],
+        [/^stands ≈ (.+) m higher than the others to clear the (.+)/, m => `It has to stand about ${m[1]} m higher than the others to clear the ${m[2]}, because its form cannot follow the slope.`],
+        [/^beyond Engel’s usual span range/, () => 'Your span is outside the range Engel shows as usual for this type: possible, but less common.'],
+        [/^footings that resist its thrust/, () => 'Footings that resist its sideways push, or a tie under the floor between its feet.'],
+        [/^(.+) to take its thrust/, m => `${m[1][0].toUpperCase() + m[1].slice(1)} to take its sideways push.`],
+        [/^(\d+) supports inside the space/, m => `${m[1]} supports standing inside the space — they break up the open floor.`],
+        [/^nothing beyond its own supports/, () => 'Nothing beyond its own supports, as modeled.']
+    ];
+    function sayLite(t, kind) {
+        for (const [re, f] of SAY) { const m = re.exec(t); if (m) return f(m); }
+        const s = t[0].toUpperCase() + t.slice(1);
+        return /[.!]$/.test(s) ? s : s + '.';
     }
     function envNote(r) {
         const env = envGeom(); if (!env) return '';
         return `<li><b>The space:</b> ${esc(env.note)}${env.tooSmall ? ' <b>The hall is barely big enough for it.</b>' : ''} ${r.warp > 1e-6 ? `This system’s roof can slope along the hall, so it follows the rake: eaves ≈ ${f2(r.H)} m at the front rising to ≈ ${f2(r.Hback)} m at the back.` : r.Hraise > 0.05 ? `This system has to stand ${f2(r.Hraise)} m higher than asked to clear it (eaves ≈ ${f2(r.H)} m).` : 'This system clears it at the height asked for.'}<br><i>Sources: ${esc(env.src.join(' · '))}</i></li>`;
     }
     function liteNotes(r) {
-        const T = thrustLevel(r), stat = /kN|kNm|N\/mm|from statics|middle third|resultant|Heyman|qL|q·|\bH = |\bT = |EN 1995|estimate/i;
-        return envNote(r) + `<li><b>Support load path:</b> ${esc(supportScheme(r)[0])}</li><li><b>Horizontal reactions:</b> ${esc(supportScheme(r)[1])}</li>`
-            + `<li><b>Thrust:</b> ${T ? `${T.word}${T.ratio == null ? '' : ` (H/V ≈ ${f1(T.ratio)})`}, taken by ${T.by}` : 'none reported by the model'}</li>`
+        const stat = /kN|kNm|N\/mm|from statics|middle third|resultant|Heyman|qL|q·|\bH = |\bT = |EN 1995|estimate/i;
+        return envNote(r) + `<li><b>How the load travels:</b> ${esc(loadStory(r))}</li>`
             + r.notes.filter(n => !stat.test(n)).map(n => `<li>${esc(n)}</li>`).join('')
-            + `<li><b>Span basis:</b> ${esc(spanSource(r.sys))}</li><li><b>Reading:</b> Lite — Engel’s mechanism, form and space; estimated loads, forces and sizes are in Full.</li>`;
+            + `<li><b>Span basis:</b> ${esc(liteSpan(r))}</li><li><b>Reading:</b> Lite — Engel’s mechanism, form and space; estimated loads, forces and sizes are in Full.</li>`;
+    }
+    // the load path in one paragraph, for students: the members the load passes through, then what happens sideways
+    function loadStory(r) {
+        const sc = supportScheme(r), T = thrustLevel(r), generic = /schematically/.test(sc[0]);
+        const path = generic ? `The roof carries its load to its supports: ${r.colNote.replace(/;.*$/, '')}.` : `The load passes ${sc[0].split(' → ').map((x, i) => i ? 'into ' + x.toLowerCase() : 'from the ' + x.toLowerCase()).join(', then ')}, and down to the ground.`;
+        const side = !T ? 'It presses straight down on its supports: as modeled, nothing pushes them sideways, so plain columns or walls can carry it.'
+            : T.word === 'ring force' ? `Its edge pulls or pushes round the whole rim, so a ring has to hold it together; that ring keeps the push off the supports.`
+            : `Because its form arches or hangs, it also pushes sideways where it lands — a ${T.word} push${T.ratio == null ? '' : `, about ${f1(T.ratio)} times as strong as the weight it brings down there`} — and ${T.by} must take that push${T.by === 'the ground' ? ' through footings that resist sliding' : ''}.`;
+        return `${path} ${side}`;
+    }
+    // Engel's span chart for this system's row: his usual and possible spans in the chosen material; he gives no depth formula
+    function liteSpan(r) {
+        const sp = r.sys.spans[r.m], rg = a => a.map(([x, y]) => `${x}–${y} m`).join(', ');
+        if (r.sys.spanSrc || !spanPage(r.sys) || !sp) return 'Engel gives no span chart for this system; the span range used here is the author’s estimate. Engel gives no formula for the depth either: the depth drawn is the author’s model.';
+        const where = r.st === 'typ' ? 'within the usual range' : r.st === 'pos' ? 'possible, but outside the usual range' : 'outside the ranges Engel draws';
+        return `Engel’s span chart (p.${spanPage(r.sys)}) gives this type in ${MATNAME[r.m] || r.m} a usual span of ${rg(sp.typ)} and a possible span of ${rg(rangesOf(sp))}; ${r.spanUsed && Math.abs(r.spanUsed - S.L) > 0.5 ? `this system spans ${f1(r.spanUsed)} m to clear your ${f1(S.L)} m hall, which is` : `your ${f1(S.L)} m span is`} ${where}. The chart gives spans only — Engel states no formula for the structural depth, so the depth drawn here (≈ ${f1(r.zone)} m) is the author’s model, not his.`;
     }
     // Engel page of each system's full drawing in its chapter (by mode where the modes are different drawings);
     // null: Engel draws it only in the genealogy (pp.44–55) or in principle, not as a full drawing
